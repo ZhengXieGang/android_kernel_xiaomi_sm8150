@@ -1467,6 +1467,53 @@ void __scsi_remove_device(struct scsi_device *sdev)
 	put_device(dev);
 }
 
+/*
+ * A non-boot LUN that currently exposes system/vendor/super partitions must
+ * not be torn down: some repartitioned units (dual-boot "Mindows" layouts)
+ * keep the live system on a backup LUN, and removing its SCSI device during
+ * early boot takes every /system access down with it.  Stock layouts are
+ * unaffected because their backup LUNs carry no such partitions.
+ */
+static int scsi_sdev_disk_child(struct device *dev, void *data)
+{
+	struct gendisk **out = data;
+
+	if (dev->class != &block_class)
+		return 0;
+	*out = dev_to_disk(dev);
+	return 1;
+}
+
+static bool scsi_disk_has_system_partitions(struct gendisk *disk)
+{
+	static const char * const names[] = { "system", "vendor", "super" };
+	struct disk_part_iter piter;
+	struct hd_struct *part;
+	bool found = false;
+	int i;
+
+	if (!disk)
+		return false;
+
+	disk_part_iter_init(&piter, disk, 0);
+	while ((part = disk_part_iter_next(&piter))) {
+		if (!part->info || !part->info->volname[0])
+			continue;
+		for (i = 0; i < ARRAY_SIZE(names); i++) {
+			if (!strcmp((const char *)part->info->volname,
+				    names[i])) {
+				found = true;
+				break;
+			}
+		}
+		if (found)
+			break;
+	}
+	disk_part_iter_exit(&piter);
+
+	return found;
+}
+
 /**
  * scsi_remove_device - unregister a device from the scsi bus
  * @sdev:	scsi_device to unregister
@@ -1474,14 +1521,17 @@ void __scsi_remove_device(struct scsi_device *sdev)
 void scsi_remove_device(struct scsi_device *sdev)
 {
 	struct Scsi_Host *shost = sdev->host;
+	struct gendisk *disk = NULL;
 
-	/* The backup LUNs of the UFS (lun 1..7) carry the "super" backing
-	 * store on this device (Mindows layout: system -> sde54, vendor ->
-	 * sde53).  Their teardown during early boot takes every /system
-	 * access down with it, so only lun 0 (the boot LUN) is removed
-	 * through this path. */
-	if (sdev->lun != 0)
+	if (sdev->lun != 0 && sdev->request_queue &&
+	    device_for_each_child(&sdev->sdev_gendev, &disk,
+				  scsi_sdev_disk_child) &&
+	    disk && disk->queue == sdev->request_queue &&
+	    scsi_disk_has_system_partitions(disk)) {
+		pr_info("scsi: keeping LUN %d (live system partitions on this LUN)\n",
+			sdev->lun);
 		return;
+	}
 
 	mutex_lock(&shost->scan_mutex);
 	__scsi_remove_device(sdev);

@@ -38,6 +38,10 @@ struct ion_device {
 extern struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 					   unsigned int heap_id_mask,
 					   unsigned int flags);
+extern struct ion_buffer *ion_buffer_alloc_from_heap(struct ion_device *dev,
+						     struct ion_heap *heap,
+						     size_t len,
+						     unsigned int flags);
 extern void ion_buffer_release(struct ion_buffer *buffer);
 extern int ion_buffer_destroy(struct ion_device *dev,
 			      struct ion_buffer *buffer);
@@ -48,6 +52,10 @@ extern void ion_buffer_kmap_put(struct ion_buffer *buffer);
 extern struct dma_buf *ion_dmabuf_alloc(struct ion_device *dev, size_t len,
 					unsigned int heap_id_mask,
 					unsigned int flags);
+extern struct dma_buf *ion_dmabuf_alloc_from_heap(struct ion_device *dev,
+						  struct ion_heap *heap,
+						  size_t len,
+						  unsigned int flags);
 extern int ion_free(struct ion_buffer *buffer);
 
 /* ion heap helpers */

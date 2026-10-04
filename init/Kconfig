@@ -491,6 +491,20 @@ config SCHED_WALT
 	used to guide task placement as well as task frequency requirements
 	for cpufreq governors.
 
+
+config SCHED_TUNE
+	bool "SchedTune cgroup controller"
+	depends on CGROUPS
+	default n
+	help
+	  Provides the "schedtune" cgroup v1 controller (the CAF/Android
+	  schedtune interface).  The crDroid userspace expects it: without
+	  the controller, libprocessgroup's SetupCgroups fails and every
+	  service start is rejected, which aborts the boot.  This port
+	  provides the control interface only; the EAS boost hooks are not
+	  wired into this tree.
+
+
 config BSD_PROCESS_ACCT
 	bool "BSD Process Accounting"
 	depends on MULTIUSER

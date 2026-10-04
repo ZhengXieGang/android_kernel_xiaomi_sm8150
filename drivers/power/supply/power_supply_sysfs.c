@@ -236,6 +236,11 @@ static struct power_supply_attr power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(TX_ADAPTER),
 	POWER_SUPPLY_ATTR(SIGNAL_STRENGTH),
 	POWER_SUPPLY_ATTR(REVERSE_CHG_MODE),
+	/* Charging control (LineageOS health HAL); mirror the enum in
+	 * include/linux/power_supply.h, same order. */
+	POWER_SUPPLY_ATTR(BATTERY_CHARGING_ENABLED),
+	POWER_SUPPLY_ATTR(CHARGING_ENABLED),
+	POWER_SUPPLY_ATTR(INPUT_SUSPEND),
 };
 
 static struct attribute *

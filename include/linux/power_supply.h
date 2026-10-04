@@ -192,6 +192,14 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_TX_ADAPTER,
 	POWER_SUPPLY_PROP_SIGNAL_STRENGTH,
 	POWER_SUPPLY_PROP_REVERSE_CHG_MODE,
+	/* Charging control (LineageOS health HAL): the 4.14 raphael kernel
+	 * exposes battery_charging_enabled / charging_enabled / input_suspend
+	 * on the battery psy and vendor.lineage.health waits for them at
+	 * boot.  The matching entries in power_supply_attrs[] must stay
+	 * adjacent and in this order -- the attr index IS the property. */
+	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 };
 
 enum power_supply_type {

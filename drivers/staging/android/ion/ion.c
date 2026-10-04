@@ -27,6 +27,7 @@
 #include <linux/msm_ion_ids.h>
 
 #include "ion_private.h"
+#include "heaps/msm_ion_priv.h"
 
 #define ION_CURRENT_ABI_VERSION  2
 
@@ -47,12 +48,38 @@ int ion_free(struct ion_buffer *buffer)
 EXPORT_SYMBOL_GPL(ion_free);
 
 /*
- * Legacy QSEECOM heap id, as still requested by some vendor userspace built
- * against older ION headers (the Goodix FOD fingerprint HAL on sm8150 asks
- * for 1 << 27). ION_QSECOM_HEAP_ID is ION_BIT(7) here, so no heap answers to
- * bit 27 and the allocation fails with -ENODEV.
+ * The MIUI 12.5 vendor image on this device was built against the old msm
+ * ION headers, where the heap ids were plain bit positions, and its QSEECom
+ * userspace still asks for the legacy QSEECOM heaps as ION_HEAP(27) (main
+ * heap) and ION_HEAP(19) (TA-image heap). This kernel registers those two
+ * heaps under the newer ION_BIT() ids instead, so no heap answers to those
+ * bits and the allocation fails with -ENODEV. That is fatal for the Goodix
+ * FOD fingerprint HAL: its QSEECom TA ("gfraph") cannot be loaded, the HAL
+ * module never opens, and the fingerprint service crash-loops.
+ *
+ * Masks that matched a registered heap never reach the fallback below, so
+ * only the legacy requests are re-routed, and they are re-routed by heap
+ * name because the legacy bits cannot be translated to the new ids (the
+ * heap id masks are not simple bit positions in this tree).
  */
+#define ION_LEGACY_QSECOM_TA_HEAP_ID	ION_BIT(19)
 #define ION_LEGACY_QSECOM_HEAP_ID	ION_BIT(27)
+
+static struct ion_heap *ion_heap_by_name(const char *name)
+{
+	struct ion_heap *heap;
+
+	down_read(&internal_dev->lock);
+	plist_for_each_entry(heap, &internal_dev->heaps, node) {
+		if (heap->name && !strcmp(heap->name, name)) {
+			up_read(&internal_dev->lock);
+			return heap;
+		}
+	}
+	up_read(&internal_dev->lock);
+
+	return NULL;
+}
 
 static int ion_alloc_fd(size_t len, unsigned int heap_id_mask,
 			unsigned int flags)
@@ -61,18 +88,25 @@ static int ion_alloc_fd(size_t len, unsigned int heap_id_mask,
 	struct dma_buf *dmabuf;
 
 	dmabuf = ion_dmabuf_alloc(internal_dev, len, heap_id_mask, flags);
+
 	/*
-	 * Only when no registered heap matched the mask at all: translate the
-	 * legacy QSEECOM bit to the real heap id and try once more. Masks that
-	 * match a real heap never get here, and kernel clients do not use this
-	 * path (ion_alloc() calls ion_dmabuf_alloc() directly).
+	 * Only when no registered heap matched the mask at all: re-route the
+	 * legacy QSEECOM bits to the heaps they named. Kernel clients do not
+	 * use this path (ion_alloc() calls ion_dmabuf_alloc() directly).
 	 */
-	if (IS_ERR(dmabuf) && PTR_ERR(dmabuf) == -ENODEV &&
-	    (heap_id_mask & ION_LEGACY_QSECOM_HEAP_ID)) {
-		heap_id_mask = (heap_id_mask & ~ION_LEGACY_QSECOM_HEAP_ID) |
-			       ION_QSECOM_HEAP_ID;
-		dmabuf = ion_dmabuf_alloc(internal_dev, len, heap_id_mask,
-					  flags);
+	if (IS_ERR(dmabuf) && PTR_ERR(dmabuf) == -ENODEV) {
+		const char *legacy_heap = NULL;
+		struct ion_heap *heap;
+
+		if (heap_id_mask & ION_LEGACY_QSECOM_TA_HEAP_ID)
+			legacy_heap = ION_QSECOM_TA_HEAP_NAME;
+		else if (heap_id_mask & ION_LEGACY_QSECOM_HEAP_ID)
+			legacy_heap = ION_QSECOM_HEAP_NAME;
+
+		heap = legacy_heap ? ion_heap_by_name(legacy_heap) : NULL;
+		if (heap)
+			dmabuf = ion_dmabuf_alloc_from_heap(internal_dev,
+							    heap, len, flags);
 	}
 	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);

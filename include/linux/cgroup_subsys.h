@@ -37,6 +37,10 @@ SUBSYS(devices)
 SUBSYS(freezer)
 #endif
 
+#if IS_ENABLED(CONFIG_SCHED_TUNE)
+SUBSYS(schedtune)
+#endif
+
 #if IS_ENABLED(CONFIG_CGROUP_NET_CLASSID)
 SUBSYS(net_cls)
 #endif

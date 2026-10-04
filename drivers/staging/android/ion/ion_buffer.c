@@ -176,6 +176,32 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 	return buffer;
 }
 
+/*
+ * Allocate a buffer from one specific heap.  Counterpart of ion_buffer_alloc()
+ * for callers that have already resolved the heap (the legacy QSEECOM mask
+ * translation in ion_alloc_fd()); same locking as ion_buffer_alloc(), i.e.
+ * dev->lock is taken for reading around ion_buffer_create().
+ */
+struct ion_buffer *ion_buffer_alloc_from_heap(struct ion_device *dev,
+					      struct ion_heap *heap,
+					      size_t len, unsigned int flags)
+{
+	struct ion_buffer *buffer;
+
+	if (!dev || !heap || !len)
+		return ERR_PTR(-EINVAL);
+
+	len = PAGE_ALIGN(len);
+	if (!len)
+		return ERR_PTR(-EINVAL);
+
+	down_read(&dev->lock);
+	buffer = ion_buffer_create(heap, dev, len, flags);
+	up_read(&dev->lock);
+
+	return buffer;
+}
+
 int ion_buffer_zero(struct ion_buffer *buffer)
 {
 	struct sg_table *table;

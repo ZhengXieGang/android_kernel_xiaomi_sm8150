@@ -1591,6 +1591,10 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
 #endif
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
+	/* Charging control for the LineageOS health HAL (4.14 parity) */
+	POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_INPUT_SUSPEND,
 };
 
 #define DEBUG_ACCESSORY_TEMP_DECIDEGC	250
@@ -1690,6 +1694,16 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_from_bms(chg,
 				SMB5_QG_TIME_TO_FULL_NOW, &pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		/* same meaning on this target: charging allowed unless the
+		 * charge-disable votable says otherwise */
+		pval->intval = !get_effective_result(chg->chg_disable_votable);
+		rc = 0;
+		break;
+	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+		rc = smblib_get_prop_input_suspend(chg, pval);
+		break;
 	default:
 		pr_debug("batt power supply prop %d not supported\n", psp);
 		return -EINVAL;
@@ -1745,6 +1759,15 @@ static int smb5_batt_set_prop(struct power_supply *psy,
 		smb5_config_iterm(chg, val->intval, 50);
 		break;
 #endif
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+		/* 1 = allow charging (release the disable vote) */
+		rc = vote(chg->chg_disable_votable, USER_VOTER,
+				(bool)!val->intval, 0);
+		break;
+	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
+		rc = smblib_set_prop_input_suspend(chg, val);
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -1759,6 +1782,9 @@ static int smb5_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STATUS:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 	case POWER_SUPPLY_PROP_CAPACITY:
+	case POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+	case POWER_SUPPLY_PROP_INPUT_SUSPEND:
 		return 1;
 	default:
 		break;

@@ -1475,6 +1475,14 @@ void scsi_remove_device(struct scsi_device *sdev)
 {
 	struct Scsi_Host *shost = sdev->host;
 
+	/* The backup LUNs of the UFS (lun 1..7) carry the "super" backing
+	 * store on this device (Mindows layout: system -> sde54, vendor ->
+	 * sde53).  Their teardown during early boot takes every /system
+	 * access down with it, so only lun 0 (the boot LUN) is removed
+	 * through this path. */
+	if (sdev->lun != 0)
+		return;
+
 	mutex_lock(&shost->scan_mutex);
 	__scsi_remove_device(sdev);
 	mutex_unlock(&shost->scan_mutex);

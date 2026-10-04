@@ -381,3 +381,32 @@ struct dma_buf *ion_dmabuf_alloc(struct ion_device *dev, size_t len,
 
 	return dmabuf;
 }
+
+/*
+ * Same as ion_dmabuf_alloc(), but the heap has been resolved by the caller
+ * instead of being picked through the heap id mask (used for the legacy
+ * QSEECOM heap bits, see ion_alloc_fd()).
+ */
+struct dma_buf *ion_dmabuf_alloc_from_heap(struct ion_device *dev,
+					   struct ion_heap *heap, size_t len,
+					   unsigned int flags)
+{
+	struct ion_buffer *buffer;
+	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
+	struct dma_buf *dmabuf;
+
+	buffer = ion_buffer_alloc_from_heap(dev, heap, len, flags);
+	if (IS_ERR(buffer))
+		return ERR_CAST(buffer);
+
+	exp_info.ops = &dma_buf_ops;
+	exp_info.size = buffer->size;
+	exp_info.flags = O_RDWR;
+	exp_info.priv = buffer;
+
+	dmabuf = dma_buf_export(&exp_info);
+	if (IS_ERR(dmabuf))
+		ion_buffer_destroy(dev, buffer);
+
+	return dmabuf;
+}
